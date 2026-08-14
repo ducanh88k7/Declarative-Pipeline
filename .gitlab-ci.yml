@@ -1,0 +1,65 @@
+stages:
+  - build
+  - test
+  - lint
+  - scan
+  - push
+
+variables:
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+build-image:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -f Dockerfile.multistage -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker save $IMAGE_NAME:$IMAGE_TAG -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+run-unit-test:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install --no-cache-dir -r app/requirements.txt
+  script:
+    - cd app && pytest test_main.py -v
+
+run-lint:
+  stage: lint
+  image: python:3.11-slim
+  before_script:
+    - pip install --no-cache-dir flake8
+  script:
+    - flake8 app/ --max-line-length=100 --exclude=app/test_main.py
+
+scan-image:
+  stage: scan
+  image: aquasec/trivy:latest
+  needs:
+    - build-image
+  script:
+    - docker load -i image.tar
+    - trivy image --severity HIGH,CRITICAL --exit-code 1 $IMAGE_NAME:$IMAGE_TAG
+
+push-image:
+  stage: push
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  needs:
+    - build-image
+    - run-unit-test
+    - run-lint
+    - scan-image
+  script:
+    - docker load -i image.tar
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+  only:
+    - main
