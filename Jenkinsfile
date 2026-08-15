@@ -17,12 +17,11 @@ pipeline {
             agent {
                 docker {
                     image 'python:3.11-slim'
-                    args '-v $WORKSPACE/app:/app -w /app'
                 }
             }
             steps {
-                sh 'pip install --no-cache-dir -r requirements.txt'
-                sh 'pytest test_main.py -v'
+                sh 'cd app && pip install --no-cache-dir -r requirements.txt'
+                sh 'cd app && pytest test_main.py -v'
             }
         }
 
@@ -30,12 +29,11 @@ pipeline {
             agent {
                 docker {
                     image 'python:3.11-slim'
-                    args '-v $WORKSPACE/app:/app -w /app'
                 }
             }
             steps {
-                sh 'pip install --no-cache-dir flake8'
-                sh 'flake8 . --max-line-length=100 --exclude=test_main.py'
+                sh 'cd app && pip install --no-cache-dir flake8'
+                sh 'cd app && flake8 . --max-line-length=100 --exclude=test_main.py'
             }
         }
 
