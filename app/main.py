@@ -12,6 +12,10 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 
+@app.get("/")
+def root():
+    return {"message": "CV Ranker AI - Lab Service"}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
