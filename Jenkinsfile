@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${IMAGE_TAG} --provenance=false --sbom=false ."
             }
         }
 
