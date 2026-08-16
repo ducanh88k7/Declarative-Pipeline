@@ -1,3 +1,5 @@
+@Library('my-shared-lib') _
+
 pipeline {
     agent any
 
@@ -7,9 +9,15 @@ pipeline {
     }
 
     stages {
-        stage('Build') {
+        // stage('Build') {
+        //     steps {
+        //         sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${IMAGE_TAG} --provenance=false --sbom=false ."
+        //     }
+        // }
+
+        stage('Build and Scan') {
             steps {
-                sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${IMAGE_TAG} --provenance=false --sbom=false ."
+                buildAndScanImage("${IMAGE_NAME}", "${IMAGE_TAG}", "Dockerfile.multistage")
             }
         }
 
@@ -37,14 +45,14 @@ pipeline {
             }
         }
 
-        stage('Scan') {
-            steps {
-                // TODO: msgpack/setuptools báo vulnerable qua Trivy chạy trong Jenkins (DooD)
-                // dù xác nhận độc lập filesystem image đã sạch (xem ghi chú ngày hôm nay).
-                // Tạm hạ --exit-code để không chặn Pipeline, cần điều tra thêm sau.
-                sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:${IMAGE_TAG}"
-            }
-        }
+        // stage('Scan') {
+        //     steps {
+        //         // TODO: msgpack/setuptools báo vulnerable qua Trivy chạy trong Jenkins (DooD)
+        //         // dù xác nhận độc lập filesystem image đã sạch (xem ghi chú ngày hôm nay).
+        //         // Tạm hạ --exit-code để không chặn Pipeline, cần điều tra thêm sau.
+        //         sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:${IMAGE_TAG}" đúng 
+        //     }
+        // }
 
         stage('Push') {
             when {
