@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "cv-ranker-lab"
-        IMAGE_TAG = "${env.GIT_COMMIT[0..7]}"
+        IMAGE_TAG = "${env.GIT_COMMIT[0..7]}-${env.BUILD_NUMBER}"
     }
 
     stages {
