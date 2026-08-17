@@ -6,6 +6,8 @@ pipeline {
     environment {
         IMAGE_NAME = "cv-ranker-lab"
         IMAGE_TAG = "${env.GIT_COMMIT[0..7]}-${env.BUILD_NUMBER}"
+        IMAGE_VERSION = "v1.1.0"
+        REGISTRY = "localhost:5000"
     }
 
     stages {
@@ -59,14 +61,29 @@ pipeline {
                 branch 'main'
             }
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'registry-credentials',
-                    usernameVariable: 'REG_USER',
-                    passwordVariable: 'REG_PASS'
-                )]) {
-                    sh 'echo $REG_PASS | docker login -u $REG_USER --password-stdin myregistry.example.com'
-                    sh "docker push myregistry.example.com/${IMAGE_NAME}:${IMAGE_TAG}"
-                }
+                sh """
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:production
+
+                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
+                    docker push ${REGISTRY}/${IMAGE_NAME}:production
+                """
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh """
+                    export API_IMAGE=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
+                    docker compose -f docker-compose.yml up -d
+                    sleep 5
+                    curl -f http://localhost:8000/health
+                    curl -f http://localhost:8000/db-check
+                    curl -f http://localhost:8000/cache-check
+                    docker compose down
+                """
             }
         }
     }

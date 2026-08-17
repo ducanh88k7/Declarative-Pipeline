@@ -1,8 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.multistage
+    image: ${API_IMAGE:-cv-ranker-lab:local}
     ports:
       - "8000:8000"
     environment:
