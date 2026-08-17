@@ -74,16 +74,23 @@ pipeline {
         }
 
         stage('Smoke Test') {
+            when { branch 'main' }
             steps {
-                sh """
-                    export API_IMAGE=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-                    docker compose -f docker-compose.yml up -d
-                    sleep 5
-                    curl -f http://localhost:8000/health
-                    curl -f http://localhost:8000/db-check
-                    curl -f http://localhost:8000/cache-check
-                    docker compose down
-                """
+                withCredentials([string(
+                    credentialsId: 'db-password',
+                    variable: 'DB_PASSWORD'
+                )]) {
+                    sh """
+                        echo "DB_PASSWORD=\$DB_PASSWORD" > .env
+                        export API_IMAGE=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
+                        docker compose -f docker-compose.yml up -d
+                        sleep 5
+                        curl -f http://localhost:8000/health
+                        curl -f http://localhost:8000/db-check
+                        curl -f http://localhost:8000/cache-check
+                        docker compose down -v
+                    """
+                }
             }
         }
     }
