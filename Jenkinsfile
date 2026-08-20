@@ -57,7 +57,7 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 // Thay thế 'YOUR_CREDENTIAL_ID' bằng ID credential chứa mật khẩu DB trên Jenkins của bạn
-                withCredentials([string(credentialsId: 'YOUR_CREDENTIAL_ID', variable: 'DB_PASSWORD')]) {
+                withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     // Sử dụng dấu nháy đơn (''') để script được thực thi dưới dạng shell thuần túy, tránh lỗi nội suy Groovy
                     sh '''
                         # Khởi động cụm dịch vụ
