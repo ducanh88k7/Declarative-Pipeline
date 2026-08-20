@@ -84,8 +84,8 @@ pipeline {
         stage('Push') {
             steps {
                 sh '''
-                    docker tag ${IMAGE_TAG} local-registry:5000/cv-ranker-lab:v1.2.0
-                    docker push local-registry:5000/cv-ranker-lab:v1.2.0
+                    docker tag ${IMAGE_TAG} localhost:5000/cv-ranker-lab:v1.2.0
+                    docker push localhost:5000/cv-ranker-lab:v1.2.0
                 '''
             }
         }
