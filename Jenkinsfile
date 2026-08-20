@@ -83,7 +83,10 @@ pipeline {
 
         stage('Push') {
             steps {
-                echo "Thêm lệnh Docker Push của bạn tại đây"
+                sh '''
+                    docker tag ${IMAGE_TAG} local-registry:5000/cv-ranker-lab:v1.2.0
+                    docker push local-registry:5000/cv-ranker-lab:v1.2.0
+                '''
             }
         }
     }
