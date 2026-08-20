@@ -56,16 +56,15 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                // Thay thế 'YOUR_CREDENTIAL_ID' bằng ID credential chứa mật khẩu DB trên Jenkins của bạn
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
                         # Khởi động cụm dịch vụ với biến môi trường IMAGE_TAG được truyền vào
-                        IMAGE_TAG=cv-ranker-lab:${GIT_COMMIT_SHORT}-${BUILD_NUMBER} docker compose -f docker-compose.yml up -d
+                        IMAGE_TAG=${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} docker compose -f docker-compose.yml up -d
                         
                         # Chờ PostgreSQL (pgvector) và API khởi động hoàn tất
                         sleep 15
                         
-                        # Lấy Container ID của service API (giả sử tên service trong docker-compose.yml là 'api')
+                        # Lấy Container ID của service API
                         API_CONTAINER=$(docker compose ps -q api)
                         
                         # Trích xuất IP động của container API trên Docker bridge network
@@ -76,7 +75,6 @@ pipeline {
                     '''
                 }
             }
-        }
             post {
                 always {
                     // Xóa resource để dọn dẹp workspace sau khi test
@@ -94,7 +92,7 @@ pipeline {
 
     post {
         always {
-            // Xóa Docker image cũ để giải phóng bộ nhớ
+            // Xóa Docker image cũ để giải phóng bộ nhớ cục bộ
             sh "docker rmi ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} || true"
         }
         failure {
