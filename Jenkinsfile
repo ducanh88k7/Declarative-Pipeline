@@ -56,7 +56,7 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
-                        HOST_PORT=${HOST_PORT} IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.yml up -d
+                        IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.yml up -d
                         
                         # Chờ PostgreSQL & Redis healthy
                         sleep 10
@@ -89,7 +89,7 @@ pipeline {
 
     post {
         always {
-            sh "docker rmi ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} || true"
+            sh "docker rmi ${IMAGE_TAG} || true"
         }
         failure {
             echo 'Pipeline thất bại - kiểm tra log ở Stage bị đỏ.'
