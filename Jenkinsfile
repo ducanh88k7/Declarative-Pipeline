@@ -13,7 +13,6 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 script {
-                    // Lấy short SHA an toàn để tránh lỗi NullPointer ở global environment
                     def shortCommit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.IMAGE_TAG = "${shortCommit}-${env.BUILD_NUMBER}"
                 }
@@ -28,9 +27,7 @@ pipeline {
 
         stage('Test') {
             agent {
-                docker {
-                    image 'python:3.11-slim'
-                }
+                docker { image 'python:3.11-slim' }
             }
             steps {
                 dir('app') {
@@ -42,14 +39,40 @@ pipeline {
 
         stage('Lint') {
             agent {
-                docker {
-                    image 'python:3.11-slim'
-                }
+                docker { image 'python:3.11-slim' }
             }
             steps {
                 dir('app') {
                     sh 'pip install --no-cache-dir flake8'
                     sh 'flake8 . --max-line-length=100 --exclude=test_main.py'
+                }
+            }
+        }
+
+        // ĐƯA SMOKE TEST LÊN TRƯỚC PUSH
+        stage('Smoke Test') {
+            steps {
+                withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
+                    withEnv([
+                        "DB_PASSWORD=${DB_PASSWORD}",
+                        "API_IMAGE=${IMAGE_NAME}:${env.IMAGE_TAG}"
+                    ]) {
+                        sh 'docker compose -f docker-compose.yml up -d'
+                        
+                        // Chờ PostgreSQL healthcheck hoàn tất thay vì sleep cố định
+                        sh 'sleep 15' 
+                        
+                        sh '''
+                            curl -f http://localhost:8000/health
+                            curl -f http://localhost:8000/db-check
+                            curl -f http://localhost:8000/cache-check
+                        '''
+                    }
+                }
+            }
+            post {
+                always {
+                    sh 'docker compose down -v || true'
                 }
             }
         }
@@ -65,33 +88,6 @@ pipeline {
                     docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
                     docker push ${REGISTRY}/${IMAGE_NAME}:production
                 """
-            }
-        }
-
-        stage('Smoke Test') {
-            steps {
-                withCredentials([string(
-                    credentialsId: 'db-password',
-                    variable: 'DB_PASSWORD'
-                )]) {
-                    sh """
-                        echo "DB_PASSWORD=\$DB_PASSWORD" > .env
-                        export API_IMAGE=${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-                        docker compose -f docker-compose.yml up -d
-                    """
-                    sleep 10
-                    sh """
-                        curl -f http://localhost:8000/health
-                        curl -f http://localhost:8000/db-check
-                        curl -f http://localhost:8000/cache-check
-                    """
-                }
-            }
-            post {
-                always {
-                    // Đảm bảo dọn dẹp container kể cả khi curl bị lỗi (HTTP 500/timeout)
-                    sh 'docker compose down -v || true'
-                }
             }
         }
     }

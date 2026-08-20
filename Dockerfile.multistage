@@ -3,28 +3,32 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Tạo virtual environment chuẩn
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt \
-    && pip install --no-cache-dir --prefix=/install --upgrade msgpack setuptools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir msgpack
 
 # ---------- Stage 2: Runtime ----------
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-
 WORKDIR /app
 
-COPY --from=builder /install /usr/local
+# Copy virtual environment từ builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-COPY app/ .
-
+# Tạo user và cấp quyền truy cập thư mục app
 RUN useradd -m appuser
+COPY --chown=appuser:appuser app/ .
+
 USER appuser
 
 EXPOSE 8000
