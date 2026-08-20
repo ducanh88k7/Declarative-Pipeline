@@ -58,10 +58,9 @@ pipeline {
             steps {
                 // Thay thế 'YOUR_CREDENTIAL_ID' bằng ID credential chứa mật khẩu DB trên Jenkins của bạn
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
-                    // Sử dụng dấu nháy đơn (''') để script được thực thi dưới dạng shell thuần túy, tránh lỗi nội suy Groovy
                     sh '''
-                        # Khởi động cụm dịch vụ
-                        docker compose -f docker-compose.yml up -d
+                        # Khởi động cụm dịch vụ với biến môi trường IMAGE_TAG được truyền vào
+                        IMAGE_TAG=cv-ranker-lab:${GIT_COMMIT_SHORT}-${BUILD_NUMBER} docker compose -f docker-compose.yml up -d
                         
                         # Chờ PostgreSQL (pgvector) và API khởi động hoàn tất
                         sleep 15
@@ -77,6 +76,7 @@ pipeline {
                     '''
                 }
             }
+        }
             post {
                 always {
                     // Xóa resource để dọn dẹp workspace sau khi test

@@ -1,6 +1,6 @@
 services:
   api:
-    image: ${API_IMAGE:-cv-ranker-lab:local}
+    image: ${IMAGE_TAG:-cv-ranker-lab:local}
     ports:
       - "8000:8000"
     environment:
