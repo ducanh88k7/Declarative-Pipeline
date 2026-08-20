@@ -55,9 +55,6 @@ pipeline {
         }
 
         stage('Push') {
-            when {
-                branch 'main'
-            }
             steps {
                 sh """
                     docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${env.IMAGE_TAG}
@@ -72,7 +69,6 @@ pipeline {
         }
 
         stage('Smoke Test') {
-            when { branch 'main' }
             steps {
                 withCredentials([string(
                     credentialsId: 'db-password',
