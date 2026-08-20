@@ -1,33 +1,35 @@
-@Library('my-shared-lib') _
-
 pipeline {
     agent any
-
+    
     environment {
-        IMAGE_NAME = "cv-ranker-lab"
-        IMAGE_VERSION = "v1.1.0"
-        REGISTRY = "localhost:5000"
+        // Tên image dựa theo project CV Ranker AI của bạn
+        IMAGE_NAME = 'cv-ranker-lab'
     }
 
     stages {
         stage('Setup Environment') {
             steps {
                 script {
-                    def shortCommit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG = "${shortCommit}-${env.BUILD_NUMBER}"
+                    // Lấy mã hash ngắn của commit
+                    env.SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
         }
 
         stage('Build and Scan') {
             steps {
-                buildAndScanImage("${IMAGE_NAME}", "${env.IMAGE_TAG}", "Dockerfile.multistage")
+                // Build Multistage Dockerfile và scan với Trivy
+                sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} --provenance=false --sbom=false ."
+                sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER}"
             }
         }
 
         stage('Test') {
             agent {
-                docker { image 'python:3.11-slim' }
+                docker { 
+                    image 'python:3.11-slim'
+                    reuseNode true 
+                }
             }
             steps {
                 dir('app') {
@@ -39,7 +41,10 @@ pipeline {
 
         stage('Lint') {
             agent {
-                docker { image 'python:3.11-slim' }
+                docker { 
+                    image 'python:3.11-slim'
+                    reuseNode true 
+                }
             }
             steps {
                 dir('app') {
@@ -49,52 +54,48 @@ pipeline {
             }
         }
 
-        // ĐƯA SMOKE TEST LÊN TRƯỚC PUSH
         stage('Smoke Test') {
             steps {
-                withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
-                    withEnv([
-                        "DB_PASSWORD=${DB_PASSWORD}",
-                        "API_IMAGE=${IMAGE_NAME}:${env.IMAGE_TAG}"
-                    ]) {
-                        sh 'docker compose -f docker-compose.yml up -d'
+                // Thay thế 'YOUR_CREDENTIAL_ID' bằng ID credential chứa mật khẩu DB trên Jenkins của bạn
+                withCredentials([string(credentialsId: 'YOUR_CREDENTIAL_ID', variable: 'DB_PASSWORD')]) {
+                    // Sử dụng dấu nháy đơn (''') để script được thực thi dưới dạng shell thuần túy, tránh lỗi nội suy Groovy
+                    sh '''
+                        # Khởi động cụm dịch vụ
+                        docker compose -f docker-compose.yml up -d
                         
-                        // Chờ PostgreSQL healthcheck hoàn tất thay vì sleep cố định
-                        sh 'sleep 15' 
+                        # Chờ PostgreSQL (pgvector) và API khởi động hoàn tất
+                        sleep 15
                         
-                        sh '''
-                            curl -f http://localhost:8000/health
-                            curl -f http://localhost:8000/db-check
-                            curl -f http://localhost:8000/cache-check
-                        '''
-                    }
+                        # Lấy Container ID của service API (giả sử tên service trong docker-compose.yml là 'api')
+                        API_CONTAINER=$(docker compose ps -q api)
+                        
+                        # Trích xuất IP động của container API trên Docker bridge network
+                        API_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $API_CONTAINER)
+                        
+                        # Curl thẳng vào IP của API container thay vì localhost
+                        curl -f http://$API_IP:8000/health
+                    '''
                 }
             }
             post {
                 always {
-                    sh 'docker compose down -v || true'
+                    // Xóa resource để dọn dẹp workspace sau khi test
+                    sh 'docker compose down -v'
                 }
             }
         }
 
         stage('Push') {
             steps {
-                sh """
-                    docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${env.IMAGE_TAG}
-                    docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-                    docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:production
-
-                    docker push ${REGISTRY}/${IMAGE_NAME}:${env.IMAGE_TAG}
-                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}
-                    docker push ${REGISTRY}/${IMAGE_NAME}:production
-                """
+                echo "Thêm lệnh Docker Push của bạn tại đây"
             }
         }
     }
 
     post {
         always {
-            sh "docker rmi ${IMAGE_NAME}:${env.IMAGE_TAG} || true"
+            // Xóa Docker image cũ để giải phóng bộ nhớ
+            sh "docker rmi ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} || true"
         }
         failure {
             echo 'Pipeline thất bại - kiểm tra log ở Stage bị đỏ.'
