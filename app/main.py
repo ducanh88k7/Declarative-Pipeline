@@ -38,6 +38,7 @@ def cache_check():
     value = r.get("lab_key")
     return {"cache_value": value, "host": REDIS_HOST}
 
+
 @app.get("/v2/version")
 def get_version():
     return {"version": "1.2.0", "status": "GitOps Rollout Success"}
