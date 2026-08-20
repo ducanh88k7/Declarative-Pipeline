@@ -57,22 +57,23 @@ pipeline {
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
                         IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.yml up -d
-                        
-                        # Chờ PostgreSQL & Redis healthy
+
+                        echo "Waiting for PostgreSQL..."
                         sleep 10
-                        
-                        API_CONTAINER=$(docker compose ps -q api)
-                        API_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $API_CONTAINER)
-                        
-                        # Thêm retry cho curl để tránh bẫy race condition
-                        curl --connect-timeout 5 --retry 5 --retry-delay 3 --retry-connrefused http://$API_IP:8000/health
+
+                        docker compose ps
+
+                        echo "Testing API /health..."
+
+                        docker compose exec -T api \
+                            python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=5).read().decode())"
                     '''
                 }
             }
+
             post {
                 failure {
-                    // Bắt log ngay nếu smoke test xịt trước khi down container
-                    sh 'docker compose logs api'
+                    sh 'docker compose logs api || true'
                 }
                 always {
                     sh 'docker compose down -v'
@@ -89,7 +90,7 @@ pipeline {
 
     post {
         always {
-            sh "docker rmi ${IMAGE_TAG} || true"
+            sh "docker rmi ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} || true"
         }
         failure {
             echo 'Pipeline thất bại - kiểm tra log ở Stage bị đỏ.'
