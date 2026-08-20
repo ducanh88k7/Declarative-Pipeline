@@ -1,6 +1,9 @@
 services:
   api:
     image: ${IMAGE_TAG:-cv-ranker-lab:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.multistage
     ports:
       - "8000:8000"
     environment:

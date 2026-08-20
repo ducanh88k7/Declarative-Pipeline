@@ -2,7 +2,6 @@ pipeline {
     agent any
     
     environment {
-        // Tên image dựa theo project CV Ranker AI của bạn
         IMAGE_NAME = 'cv-ranker-lab'
     }
 
@@ -10,7 +9,6 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 script {
-                    // Lấy mã hash ngắn của commit
                     env.SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                 }
             }
@@ -18,7 +16,7 @@ pipeline {
 
         stage('Build and Scan') {
             steps {
-                // Build Multistage Dockerfile và scan với Trivy
+                // Build bằng Dockerfile.multistage
                 sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} --provenance=false --sbom=false ."
                 sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER}"
             }
@@ -58,26 +56,25 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
-                        # Khởi động cụm dịch vụ với biến môi trường IMAGE_TAG được truyền vào
                         IMAGE_TAG=${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} docker compose -f docker-compose.yml up -d
                         
-                        # Chờ PostgreSQL (pgvector) và API khởi động hoàn tất
-                        sleep 15
+                        # Chờ PostgreSQL & Redis healthy
+                        sleep 10
                         
-                        # Lấy Container ID của service API
                         API_CONTAINER=$(docker compose ps -q api)
-                        
-                        # Trích xuất IP động của container API trên Docker bridge network
                         API_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $API_CONTAINER)
                         
-                        # Curl thẳng vào IP của API container thay vì localhost
-                        curl -f http://$API_IP:8000/health
+                        # Thêm retry cho curl để tránh bẫy race condition
+                        curl --connect-timeout 5 --retry 5 --retry-delay 3 --retry-connrefused http://$API_IP:8000/health
                     '''
                 }
             }
             post {
+                failure {
+                    // Bắt log ngay nếu smoke test xịt trước khi down container
+                    sh 'docker compose logs api'
+                }
                 always {
-                    // Xóa resource để dọn dẹp workspace sau khi test
                     sh 'docker compose down -v'
                 }
             }
@@ -92,7 +89,6 @@ pipeline {
 
     post {
         always {
-            // Xóa Docker image cũ để giải phóng bộ nhớ cục bộ
             sh "docker rmi ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} || true"
         }
         failure {
