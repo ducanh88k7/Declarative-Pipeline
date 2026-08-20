@@ -3,6 +3,7 @@ pipeline {
     
     environment {
         IMAGE_NAME = 'cv-ranker-lab'
+        IMAGE_TAG = "cv-ranker-lab:${GIT_COMMIT.take(7)}-${BUILD_NUMBER}"
     }
 
     stages {
@@ -16,9 +17,8 @@ pipeline {
 
         stage('Build and Scan') {
             steps {
-                // Build bằng Dockerfile.multistage
-                sh "docker build -f Dockerfile.multistage -t ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} --provenance=false --sbom=false ."
-                sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER}"
+                sh "docker build -f Dockerfile.multistage -t ${IMAGE_TAG} --provenance=false --sbom=false ."
+                sh "trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_TAG}"
             }
         }
 
@@ -56,7 +56,7 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
-                        HOST_PORT=8080 IMAGE_TAG=cv-ranker-lab:${BUILD_TAG} docker compose -f docker-compose.yml up -d
+                        HOST_PORT=${HOST_PORT} IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.yml up -d
                         
                         # Chờ PostgreSQL & Redis healthy
                         sleep 10
