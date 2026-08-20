@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile.multistage
     ports:
-      - "8000:8000"
+      - "${HOST_PORT:-8000}:8000"
     environment:
       DB_HOST: db
       DB_NAME: cvranker

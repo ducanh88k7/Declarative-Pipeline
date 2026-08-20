@@ -56,7 +56,7 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'db-password', variable: 'DB_PASSWORD')]) {
                     sh '''
-                        IMAGE_TAG=${IMAGE_NAME}:${SHORT_COMMIT}-${BUILD_NUMBER} docker compose -f docker-compose.yml up -d
+                        HOST_PORT=8080 IMAGE_TAG=cv-ranker-lab:${BUILD_TAG} docker compose -f docker-compose.yml up -d
                         
                         # Chờ PostgreSQL & Redis healthy
                         sleep 10
