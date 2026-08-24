@@ -2,6 +2,9 @@ import os
 import psycopg2
 import redis
 from fastapi import FastAPI
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
+import time
 
 app = FastAPI()
 
@@ -42,3 +45,30 @@ def cache_check():
 @app.get("/v2/version")
 def get_version():
     return {"version": "1.2.0", "status": "GitOps Rollout Success"}
+
+
+REQUEST_COUNT = Counter(
+    "cv_ranker_requests_total",
+    "Tong so request da nhan",
+    ["endpoint", "status"]
+)
+REQUEST_LATENCY = Histogram(
+    "cv_ranker_request_duration_seconds",
+    "Thoi gian xu ly request",
+    ["endpoint"]
+)
+
+
+@app.middleware("http")
+async def track_metrics(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    REQUEST_LATENCY.labels(endpoint=request.url.path).observe(duration)
+    REQUEST_COUNT.labels(endpoint=request.url.path, status=response.status_code).inc()
+    return response
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
