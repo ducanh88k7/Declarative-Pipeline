@@ -15,6 +15,32 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 
 
+import logging
+from pythonjsonlogger import jsonlogger
+
+logger = logging.getLogger("cv_ranker")
+handler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter(
+    "%(asctime)s %(levelname)s %(name)s %(message)s",
+    rename_fields={"asctime": "timestamp", "levelname": "level"}
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+trace.set_tracer_provider(TracerProvider())
+otlp_exporter = OTLPSpanExporter(endpoint="cv-ranker-jaeger-collector:4317", insecure=True)
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(otlp_exporter))
+
+FastAPIInstrumentor.instrument_app(app)
+tracer = trace.get_tracer(__name__)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -27,11 +53,19 @@ def root():
 
 @app.get("/db-check")
 def db_check():
-    conn = psycopg2.connect(
-        host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
-    )
-    conn.close()
-    return {"db_connection": "success", "host": DB_HOST}
+    try:
+        conn = psycopg2.connect(
+            host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
+        )
+        conn.close()
+        logger.info("Ket noi DB thanh cong", extra={"endpoint": "/db-check"})
+        return {"db_connection": "success", "host": DB_HOST}
+    except Exception as e:
+        logger.error(
+            "Ket noi DB that bai",
+            extra={"endpoint": "/db-check", "error_detail": str(e)}
+        )
+        return {"db_connection": "failed"}, 500
 
 
 @app.get("/cache-check")
@@ -72,3 +106,29 @@ async def track_metrics(request, call_next):
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+import time
+import random
+
+
+@app.get("/rag-search")
+def rag_search(query: str):
+    with tracer.start_as_current_span("create_embedding") as span:
+        span.set_attribute("query.text", query)
+        time.sleep(0.05)
+        embedding = [0.1] * 768
+
+    with tracer.start_as_current_span("pgvector_search") as span:
+        span.set_attribute("db.system", "postgresql")
+        time.sleep(0.03)
+        candidates = ["cv_001", "cv_002", "cv_003"]
+        span.set_attribute("results.count", len(candidates))
+
+    with tracer.start_as_current_span("gemini_llm_call") as span:
+        span.set_attribute("llm.model", "gemini-1.5-flash")
+        simulated_latency = random.uniform(0.8, 2.5)
+        time.sleep(simulated_latency)
+        span.set_attribute("llm.latency_seconds", simulated_latency)
+
+    return {"query": query, "results": candidates}
